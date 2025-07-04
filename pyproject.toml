@@ -1,0 +1,46 @@
+[project]
+name = "adar_api"
+description = "Python API for the Sonair ADAR."
+requires-python = ">=3.11"
+readme = "README.md"
+keywords = ["adar", "sonair", "ultrasound", "adar_api"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules"
+]
+dynamic = ["version"]
+dependencies = [
+    "aiocoap",
+]
+
+[dependency-groups]
+dev = [
+  "pytest",
+]
+
+[tool.poetry]
+version = "0.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0", "poetry-dynamic-versioning>=1.0.0,<2.0.0"]
+build-backend = "poetry_dynamic_versioning.backend"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.poetry-dynamic-versioning]
+enable = true
+vcs = "git"
+fix-shallow-repository = true
+pattern = "releases/adar_api/v(?P<base>\\d+(\\.\\d+)*)"
+# Git log, which gives the commit hash, sometimes gives an inconsistent amount
+# of digits in the hash. Ask for poetry-dynamic-versioning to fetch the full
+# commit hash then use jinja templating to trim the commit length to 8 digits.
+# If we don't do this we sometimes get a version mismatch even if versions were
+# built from the same commit.
+# https://github.com/mtkennerly/poetry-dynamic-versioning/issues/96
+full-commit = true
+format-jinja = "{% set commit = commit[:8] %}{% if distance == 0 %}{{ base }}{% else %}{{ base }}.post{{ distance }}.dev0+{{ commit }}{% endif %}"
