@@ -12,40 +12,19 @@
           "divisions": 10,
           "lineWidth": 1,
           "color": "#248eff",
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "rotation": [
-            0,
-            0,
-            0
-          ],
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
           "order": 1
         }
       },
       "cameraState": {
         "perspective": true,
-        "distance": 5.839780486761127,
-        "phi": 62.906137299061946,
-        "thetaOffset": 116.73891212817566,
-        "targetOffset": [
-          -0.06415903441182669,
-          -0.2139045338665738,
-          5.61949617262524e-17
-        ],
-        "target": [
-          0,
-          0,
-          0
-        ],
-        "targetOrientation": [
-          0,
-          0,
-          0,
-          1
-        ],
+        "distance": 10,
+        "phi": 60,
+        "thetaOffset": 135,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
@@ -98,40 +77,19 @@
           "divisions": 10,
           "lineWidth": 1,
           "color": "#248eff",
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "rotation": [
-            0,
-            0,
-            0
-          ],
+          "position": [0, 0, 0],
+          "rotation": [0, 0, 0],
           "order": 1
         }
       },
       "cameraState": {
         "perspective": false,
-        "distance": 9.265824603173732,
+        "distance": 11.974738784739927,
         "phi": 47.86026573942242,
-        "thetaOffset": 92.15175616487153,
-        "targetOffset": [
-          -0.06415903441182669,
-          -0.2139045338665738,
-          5.61949617262524e-17
-        ],
-        "target": [
-          0,
-          0,
-          0
-        ],
-        "targetOrientation": [
-          0,
-          0,
-          0,
-          1
-        ],
+        "thetaOffset": 90,
+        "targetOffset": [0, 0, 0],
+        "target": [0, 0, 0],
+        "targetOrientation": [0, 0, 0, 1],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
@@ -170,7 +128,8 @@
         "poseEstimateYDeviation": 0.5,
         "poseEstimateThetaDeviation": 0.26179939
       },
-      "imageMode": {}
+      "imageMode": {},
+      "foxglovePanelTitle": "Top-down"
     }
   },
   "globalVariables": {},
