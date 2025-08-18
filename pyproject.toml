@@ -1,7 +1,7 @@
 [project]
 name = "adar_api"
-description = "Python API for the Sonair ADAR."
-requires-python = ">=3.11"
+description = "A reference implementation in python that uses the Sonair ADAR CoAP API."
+requires-python = ">=3.10"
 readme = "README.md"
 keywords = ["adar", "sonair", "ultrasound", "adar_api"]
 classifiers = [
@@ -13,12 +13,20 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "aiocoap",
+    "foxglove-sdk",
 ]
+
+[project.urls]
+Homepage = "https://sonair.com"
+Source = "https://github.com/Sonair-AS/adar_api"
 
 [dependency-groups]
 dev = [
   "pytest",
 ]
+
+[project.scripts]
+pointcloud-publisher = "adar_api.examples.pointcloud_to_foxglove:main"
 
 [tool.poetry]
 version = "0.0.0"

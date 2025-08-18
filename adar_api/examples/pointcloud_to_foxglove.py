@@ -27,7 +27,7 @@ import foxglove
 from aiocoap import Context
 
 from adar_api import Adar
-from utils import PointCloudPublisher
+from adar_api.examples.utils import PointCloudPublisher
 
 # Define the topic for publishing point cloud data
 POINTCLOUD_TOPIC = "/adar/pointcloud"

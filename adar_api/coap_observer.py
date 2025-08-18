@@ -1,7 +1,17 @@
 import asyncio
 import logging
 from enum import IntEnum
-from typing import AsyncGenerator, Self
+
+####################
+# This is a hack to get the Self type from typing, but it's not available in Python 3.10
+# TODO: Fix this or update to Pyhton 3.11
+from typing import AsyncGenerator, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Self
+else:
+    Self = "CoapObserver"
+####################
 
 from aiocoap import Message, GET, Context
 from aiocoap.protocol import BlockwiseRequest, Request

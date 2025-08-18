@@ -23,12 +23,41 @@ This package serves two main purposes:
 
 ## Installation
 
-1. Download the latest version from [Releases](https://github.com/Sonair-AS/adar_api/releases). The file should have a name similar to: `adar_api-1.0.0-py3-none-any.whl`.
-2. Open a terminal window and navigate to the folder containing the downloaded file (e.g `cd ~/downloads`)
-3. Install using pip (replace the filename with the file that was downloaded in step 1)
+### Quick Installation
+
+Install the ADAR API package from PyPI:
+
+```bash
+pip install adar-api
+```
+
+### Recommended: Using a Virtual Environment
+
+For better dependency management, it's recommended to use a virtual environment:
+
+1. **Create a virtual environment:**
    ```bash
-   pip install <FILENAME>.whl
+   python -m venv .venv
    ```
+
+2. **Activate the virtual environment:**
+   
+   **Linux/macOS:**
+   ```bash
+   source .venv/bin/activate
+   ```
+   
+   **Windows:**
+   ```cmd
+   .venv\Scripts\activate
+   ```
+
+3. **Install the package:**
+   ```bash
+   pip install adar-api
+   ```
+
+**Note:** You need to activate the virtual environment each time you want to use the `pointcloud-publisher` command or the ADAR API in a new terminal session.
 
 ## Network Requirements
 
@@ -37,6 +66,55 @@ This package serves two main purposes:
 - **Firewall**: Ensure UDP port 5683 is accessible
 
 ## Quick Start
+
+### Point cloud Publisher
+
+The easiest way to visualize the ADAR point cloud is to use the built-in `pointcloud-publisher`:
+
+```bash
+pointcloud-publisher <ADAR_IP_ADDRESS>
+```
+
+Example for an ADAR with factory-default IP address:
+```bash
+pointcloud-publisher 10.20.30.40
+```
+
+#### Advanced Usage
+
+Specify a custom Foxglove server host:
+This can be useful if you want to publish the pointcloud to a different computer than the one which is running the the pointcloud-publisher script.
+
+```bash
+pointcloud-publisher <ADAR_IP_ADDRESS> --foxglove-host <HOST_IP>
+```
+
+Example for broadcasting to a specific foxglove host:
+This will publish the pointcloud from an ADAR with IP address `10.20.30.40` to a foxglove host running on IP address 127.0.0.2
+```bash
+pointcloud-publisher 10.20.30.40 --foxglove-host 127.0.0.2
+```
+
+**Command Line Options:**
+- `ipaddr` (required): IP address of the ADAR device
+- `--foxglove-host` (optional): Host IP address for the Foxglove server (default: 127.0.0.1)
+
+#### Visualization with Foxglove Studio
+
+1. **Start the pointcloud publisher** (as shown above)
+2. **Open Foxglove Studio**
+3. **Connect to the Foxglove server:**
+   - Go to "Open connection" 
+   - Select "Foxglove WebSocket"
+   - Enter `ws://127.0.0.1:8765` (or your custom host)
+4. **Import layout for ADAR:**
+   - In the top right pane, select the layout drop-down and click "Import from file..."
+   - Select the [`foxglove_layout_ADAR.json`](adar_api/examples/foxglove_layout_ADAR.json) file.
+   - The point cloud should now appear in a 3D view and a 2D top-down view.
+
+### ADAR API
+
+For custom integrations, use the Python API directly:
 
 ```python
 import asyncio
