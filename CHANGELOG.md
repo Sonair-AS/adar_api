@@ -5,7 +5,13 @@ All notable changes to ADAR API will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and ADAR API adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.0] 2025-08-18
+## [1.1.2] 2025-08-19
+
+### Added
+
+- **Github releases**: Releases are now published to both Pypi and github and the changelog is attached in the github release.
+
+## [1.1.1] 2025-08-18
 
 ### Added
 
