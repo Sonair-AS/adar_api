@@ -3,6 +3,8 @@ name = "adar_api"
 description = "A reference implementation in python that uses the Sonair ADAR CoAP API."
 requires-python = ">=3.10"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICEN[CS]E.*"]
 keywords = ["adar", "sonair", "ultrasound", "adar_api"]
 classifiers = [
     "Programming Language :: Python :: 3",

@@ -98,7 +98,7 @@ async def coap_loop(args) -> None:
 
     # Observe point cloud data and publish it
     async for coap_msg in adar.observe_point_cloud():
-        pointcloud_publisher.publish(coap_msg.points)
+        pointcloud_publisher.publish(coap_msg.points, coap_msg.timestamp)
         msg_count += 1
 
         if msg_count % 100 == 0 or msg_count == 1:

@@ -5,6 +5,13 @@ All notable changes to ADAR API will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and ADAR API adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] 2025-09-04
+
+### Added
+
+- **pointcloud-publisher**: Add Classification and Timestamp to the point cloud in pointcloud_to_foxglove example.
+- **License**: License the `adar_api` repository under the MIT license.
+
 ## [1.1.2] 2025-08-19
 
 ### Added
@@ -22,7 +29,6 @@ and ADAR API adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 - **Installation method**: Updated from wheel-based installation to PyPI installation (`pip install adar-api`)
 - **Documentation structure**: Merged foxglove publisher example README into main README for better user experience
-
 
 ## [1.0.1] 2025-08-15
 

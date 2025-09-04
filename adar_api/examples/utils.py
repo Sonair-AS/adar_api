@@ -10,6 +10,7 @@ Features:
 - Support for frame transforms for visualization.
 """
 
+from datetime import timedelta
 import struct
 from math import cos, sin
 from typing import List, Optional
@@ -33,7 +34,7 @@ TF_TOPIC = "/tf"
 
 
 class PointCloudFormatter:
-    """Formatter for standard point cloud with x, y, z, strength."""
+    """Formatter for standard point cloud with x, y, z, strength, and classification."""
 
     def __init__(self, frame_id: str = "adar") -> None:
         """Initialize the point cloud formatter.
@@ -43,17 +44,19 @@ class PointCloudFormatter:
         """
         self.frame_id = frame_id
         self.f32 = PackedElementFieldNumericType.Float32
+        self.u8 = PackedElementFieldNumericType.Uint8
+        self.u16 = PackedElementFieldNumericType.Uint16
         self.u32 = PackedElementFieldNumericType.Uint32
 
     @property
     def point_struct(self) -> struct.Struct:
         """Get the struct format for packing point data."""
-        return struct.Struct("<ffff")  # x, y, z, strength
+        return struct.Struct("<fffHB")  # x, y, z, strength, classification
 
     @property
     def point_stride(self) -> int:
         """Get the stride (size in bytes) for each point."""
-        return 16  # 4 floats * 4 bytes
+        return 15  # 3 floats * 4 bytes + 1 uint16 * 2 bytes + 1 uint8 * 1 byte
 
     @property
     def fields(self) -> List[PackedElementField]:
@@ -62,7 +65,8 @@ class PointCloudFormatter:
             PackedElementField(name="x", offset=0, type=self.f32),
             PackedElementField(name="y", offset=4, type=self.f32),
             PackedElementField(name="z", offset=8, type=self.f32),
-            PackedElementField(name="strength", offset=12, type=self.f32),
+            PackedElementField(name="strength", offset=12, type=self.u16),
+            PackedElementField(name="classification", offset=14, type=self.u8),
         ]
 
     def pack_point(self, point: Point, buffer: bytearray, offset: int) -> None:
@@ -79,7 +83,8 @@ class PointCloudFormatter:
             point.x,
             point.y,
             point.z,
-            float(point.strength),
+            point.strength,
+            point.classification.value,
         )
 
     def format_points(self, points: List[Point], timestamp: Optional[Timestamp] = None) -> PointCloud:
@@ -199,14 +204,26 @@ class PointCloudPublisher:
         self.formatter = create_pointcloud_formatter(frame_id)
         self.auto_publish_transforms = auto_publish_transforms
 
-    def publish(self, points: List[Point], timestamp: Optional[Timestamp] = None) -> None:
+    def convert_timestamp(self, timestamp: Optional[timedelta]) -> Optional[Timestamp]:
+        """Convert a timedelta to a Foxglove timestamp."""
+        if timestamp is None:
+            return None
+
+        total_seconds = timestamp.total_seconds()
+        sec = int(total_seconds)
+        nsec = int((total_seconds - sec) * 1_000_000_000)  # Convert fractional seconds to nanoseconds
+        return Timestamp(sec=sec, nsec=nsec)
+
+    def publish(self, points: List[Point], timestamp: Optional[timedelta] = None) -> None:
         """Publish points to Foxglove.
 
         Args:
             points: List of points to publish.
             timestamp: Optional timestamp for the message.
         """
-        pointcloud_msg = self.formatter.format_points(points, timestamp)
+        foxglove_timestamp = self.convert_timestamp(timestamp)
+
+        pointcloud_msg = self.formatter.format_points(points, foxglove_timestamp)
         foxglove.log(self.topic, pointcloud_msg)
 
         if self.auto_publish_transforms:
