@@ -5,6 +5,20 @@ All notable changes to ADAR API will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and ADAR API adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] 2025-11-13
+
+### Added
+
+- **ROS2 driver**: A ROS2 driver that connects to the ADAR with COAP and publishes the point cloud to ROS.
+- **Zone visualization**: An option to publish the active zone presets as markers in Foxglove. The zones are read from an ADAR configuration file and automatically switch based on the device's active zone.
+- **pointcloud-to-foxglove**: Robust error handling with automatic retry on connection errors and graceful handling of errors. The script now recovers automatically and includes proper cleanup on Ctrl+C shutdown.
+
+### Changed
+
+- **coap-observer**: Update coap observer documentation and example usage to asyncio.to_thread to avoid blocking and network buffer overflow.
+- **foxglove-layout**: Sort point color based on y-value (ADAR coordinates) instead of distance from device. This change can make it easier to notice detections from the ceiling.
+- **coap-pointcloud**: Update point string representation
+
 ## [1.1.3] 2025-09-04
 
 ### Added

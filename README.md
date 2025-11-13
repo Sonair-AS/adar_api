@@ -36,20 +36,32 @@ pip install adar-api
 For better dependency management, it's recommended to use a virtual environment:
 
 1. **Create a virtual environment:**
+
+   The example below will create a virtual environment named `.venv` (standard naming convention) in the current working directory
+
    ```bash
    python -m venv .venv
    ```
 
 2. **Activate the virtual environment:**
-   
+
    **Linux/macOS:**
+
    ```bash
    source .venv/bin/activate
    ```
-   
-   **Windows:**
+
+   **Windows (cmd):**
+
    ```cmd
    .venv\Scripts\activate
+   ```
+
+   **Windows (PowerShell):**
+
+   ```PowerShell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force # Allow script execution for the current terminal session
+   .venv\Scripts\Activate.ps1
    ```
 
 3. **Install the package:**
@@ -57,7 +69,7 @@ For better dependency management, it's recommended to use a virtual environment:
    pip install adar-api
    ```
 
-**Note:** You need to activate the virtual environment each time you want to use the `pointcloud-publisher` command or the ADAR API in a new terminal session.
+**Note:** You need to activate the virtual environment each time you want to use the `pointcloud-publisher` command or the ADAR API in a new terminal session. To deactivate the virtual environment, simply type `deactivate`.
 
 ## Network Requirements
 
@@ -76,6 +88,7 @@ pointcloud-publisher <ADAR_IP_ADDRESS>
 ```
 
 Example for an ADAR with factory-default IP address:
+
 ```bash
 pointcloud-publisher 10.20.30.40
 ```
@@ -91,26 +104,40 @@ pointcloud-publisher <ADAR_IP_ADDRESS> --foxglove-host <HOST_IP>
 
 Example for broadcasting to a specific foxglove host:
 This will publish the pointcloud from an ADAR with IP address `10.20.30.40` to a foxglove host running on IP address 127.0.0.2
+
 ```bash
 pointcloud-publisher 10.20.30.40 --foxglove-host 127.0.0.2
 ```
 
+Example for zone visualization:
+This will publish the active zone presets as markers in Foxglove. The zones are read from an ADAR configuration file and automatically switch based on the device's active zone.
+
+```bash
+pointcloud-publisher 10.20.30.40 --config-path path/to/config.adar
+```
+
 **Command Line Options:**
+
 - `ipaddr` (required): IP address of the ADAR device
 - `--foxglove-host` (optional): Host IP address for the Foxglove server (default: 127.0.0.1)
+- `--config-path` (optional): Path to the ADAR device configuration file for zone visualization (default: None)
 
 #### Visualization with Foxglove Studio
 
 1. **Start the pointcloud publisher** (as shown above)
 2. **Open Foxglove Studio**
 3. **Connect to the Foxglove server:**
-   - Go to "Open connection" 
+   - Go to "Open connection"
    - Select "Foxglove WebSocket"
    - Enter `ws://127.0.0.1:8765` (or your custom host)
 4. **Import layout for ADAR:**
    - In the top right pane, select the layout drop-down and click "Import from file..."
    - Select the [`foxglove_layout_ADAR.json`](adar_api/examples/foxglove_layout_ADAR.json) file.
    - The point cloud should now appear in a 3D view and a 2D top-down view.
+
+### ROS Integration
+
+For ROS (Robot Operating System) integration, see the [ROS example documentation](adar_api/examples/ros/sonair_adar/README.md) for detailed setup instructions, including Docker configuration and usage examples.
 
 ### ADAR API
 
@@ -182,7 +209,9 @@ async def robust_observation():
     async for point_cloud in adar.observe_point_cloud(keep_running=True):
         try:
             # Process point cloud
-            process_points(point_cloud.points)
+            # Use to_thread to avoid blocking the underlying async network io task,
+            # which could cause network buffer overflow if process_points takes too long.
+            await asyncio.to_thread(process_points, point_cloud.points)
         except Exception as e:
             logger.warning(f"Processing error: {e}")
             # Continue observation despite processing errors

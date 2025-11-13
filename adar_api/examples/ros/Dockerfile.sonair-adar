@@ -1,0 +1,52 @@
+FROM ros:jazzy-ros-base
+
+# --------------------------------------------------------------------
+# Fix ROS repo GPG key issue (remove old keys & add new one)
+# --------------------------------------------------------------------
+RUN rm -f /etc/apt/sources.list.d/ros2* \
+          /etc/apt/sources.list.d/ros-latest* \
+          /usr/share/keyrings/ros-archive-keyring.gpg \
+ && apt-get update && apt-get install -y curl gnupg2 \
+ && curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+      -o /usr/share/keyrings/ros-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+      http://packages.ros.org/ros2/ubuntu $(. /etc/os-release && echo $UBUNTU_CODENAME) main" \
+      | tee /etc/apt/sources.list.d/ros2.list > /dev/null \
+ && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------
+# Install dependencies
+# --------------------------------------------------------------------
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    ros-jazzy-foxglove-bridge \
+    dos2unix \
+ && rm -rf /var/lib/apt/lists/*
+
+# --------------------------------------------------------------------
+# Install Python requirements for sonair_adar
+# --------------------------------------------------------------------
+WORKDIR /adar_api/ros
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir --break-system-packages -r requirements.txt
+
+# --------------------------------------------------------------------
+# Copy ROS driver and build
+# --------------------------------------------------------------------
+COPY sonair_adar sonair_adar
+COPY sonair_adar/start_ros.sh .
+
+RUN dos2unix start_ros.sh \
+ && chmod +x start_ros.sh \
+ && . /opt/ros/jazzy/setup.sh \
+ && colcon build --symlink-install --packages-select sonair_adar \
+ && . install/local_setup.sh
+
+# --------------------------------------------------------------------
+# Setup environment
+# --------------------------------------------------------------------
+RUN echo "source /opt/ros/jazzy/setup.bash" >> /root/.bashrc \
+ && echo "source /adar_api/ros/install/local_setup.bash" >> /root/.bashrc
+
+ENTRYPOINT ["/adar_api/ros/start_ros.sh"]
+CMD ["bash"]

@@ -2,18 +2,9 @@ import asyncio
 import logging
 from enum import IntEnum
 
-####################
-# This is a hack to get the Self type from typing, but it's not available in Python 3.10
-# TODO: Fix this or update to Pyhton 3.11
-from typing import AsyncGenerator, TYPE_CHECKING
+from typing import AsyncGenerator, Self
 
-if TYPE_CHECKING:
-    from typing import Self
-else:
-    Self = "CoapObserver"
-####################
-
-from aiocoap import Message, GET, Context
+from aiocoap import Message, GET, Context, TransportTuning
 from aiocoap.protocol import BlockwiseRequest, Request
 
 from .adar import Adar
@@ -25,6 +16,14 @@ class Observe(IntEnum):
     NoObserve = 1
 
 
+class FastTimeout(TransportTuning):
+    """Custom transport tuning with shorter timeouts for faster failure detection"""
+
+    ACK_TIMEOUT = 0.1
+    MAX_RETRANSMIT = 2
+    ACK_RANDOM_FACTOR = 1.0
+
+
 class CoapObserver:
     """
     Class to register as observer to a CoAP server and receive messages
@@ -34,7 +33,11 @@ class CoapObserver:
     async with CoapObserver(adar, "/point_cloud/v0") as observer:
         async for msg in observer.messages():
             points = PointCloud(msg)
-            print(points)
+
+            # Process point cloud
+            # Use to_thread to avoid blocking the underlying async network io task,
+            # which could cause network buffer overflow if process_points takes too long.
+            await asyncio.to_thread(process_points, points)
     """
 
     def __init__(self, adar: Adar, path: str):
@@ -54,6 +57,11 @@ class CoapObserver:
 
     async def messages(self, keep_running: bool = False, msg_count: int | None = None) -> AsyncGenerator[bytes, None]:
         """Listen for messages and yield them as they arrive.
+
+        For blocking and compute intensive tasks use asyncio.to_thread to avoid blocking the network io task. See
+        class docstring for example.
+
+        If too much time is spent processing a message, this iterator will skip messages and yield the newest observation.
 
         Args:
             keep_running: If True, the observer will attempt to keep running - i.e. ignore errors and keep trying to reconnect.
@@ -83,6 +91,9 @@ class CoapObserver:
                 pr_iter = aiter(self._current_request.observation)
                 while msg_count != cnt and not self._cancelled:
                     try:
+                        # NOTE:
+                        # This does not accumulate observations, so if the next observation in a sequence is not
+                        # processed in time it is dropped in favour of the following observation.
                         obs = await asyncio.wait_for(anext(pr_iter), timeout=2)
                         if not obs.code.is_successful():
                             self.logger.error(f"Error: {obs.code} received")
@@ -147,10 +158,17 @@ class CoapObserver:
         Returns:
             CoAP message with observe option set
         """
+        match observe:
+            case Observe.Observe:
+                transport_tuning = FastTimeout()
+            case Observe.NoObserve:
+                transport_tuning = TransportTuning()
+
         return Message(
             code=GET,
             uri=f"coap://{self._adar.ip_address}{self.path}",
             observe=int(observe),  # 0 = observe, 1 = no observe
+            transport_tuning=transport_tuning,
         )
 
     async def _send_message(self, msg: Message) -> tuple[BlockwiseRequest | Request, Message]:

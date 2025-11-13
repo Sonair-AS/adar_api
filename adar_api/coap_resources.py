@@ -1,6 +1,7 @@
 # CoAP Resources used in the ADAR API
 
 DEVICE_INFO_V0 = "/device_info/v0"
+STATE_V0 = "/state/v0"
 STATUS_V0 = "/status/v0"
 NETWORK_CONFIG_V0 = "/network_config/v0"
 FACTORY_RESET_V0 = "/factory_reset/v0"

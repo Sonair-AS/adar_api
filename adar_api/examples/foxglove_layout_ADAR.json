@@ -48,10 +48,10 @@
       "topics": {
         "/adar/pointcloud": {
           "visible": true,
-          "colorField": "_auto_distance",
+          "colorField": "y",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 10
+          "pointSize": 8
         }
       },
       "publish": {
@@ -113,10 +113,10 @@
       "topics": {
         "/adar/pointcloud": {
           "visible": true,
-          "colorField": "_auto_distance",
+          "colorField": "y",
           "colorMode": "colormap",
           "colorMap": "turbo",
-          "pointSize": 10
+          "pointSize": 8
         }
       },
       "publish": {

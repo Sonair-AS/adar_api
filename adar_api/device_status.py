@@ -10,6 +10,9 @@ class DeviceState(IntEnum):
     Error = 6
     Fault = 7
 
+    def __str__(self) -> str:
+        return self.name
+
 
 class ZoneStatus:
     """Represents the status of different zones in the ADAR device."""
@@ -67,7 +70,7 @@ class DeviceStatus:
     def __str__(self) -> str:
         text = f"Zone:{self.zone_selected}, State:{self.device_state}, Code: {self.transmission_code}, Zone status: {self.zone_status}"
         if self.device_error != 0:
-            text += f"Device error: 0x{self.device_error:08X}"
+            text += f" Device error: 0x{self.device_error:08X}"
         return text
 
     def __eq__(self, __value) -> bool:

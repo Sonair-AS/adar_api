@@ -22,13 +22,19 @@ from .coap_resources import (
     POINTCLOUD_V0,
     STATUS_V0,
     TRANSMISSION_CODE_V0,
+    STATE_V0,
 )
 
 
 class Adar:
     """A class representing the Adar sensor."""
 
-    def __init__(self, ctx: Context, ip_address: str | None, device_tag: str | None = None):
+    def __init__(
+        self,
+        ctx: Context,
+        ip_address: str | None,
+        device_tag: str | None = None,
+    ):
         """Initialize an ADAR device connection.
 
         Args:
@@ -86,6 +92,19 @@ class Adar:
 
         msg = "No response from point cloud info observer"
         raise CoapException(msg)
+
+    async def set_state(self, state: DeviceState) -> None:
+        """Set the state of the ADAR.
+
+        Args:
+            state: The state to set the device to.
+        """
+        if state not in (DeviceState.Enabled, DeviceState.Disabled, DeviceState.Config):
+            raise ValueError(f"Invalid state: {state}")
+        uri = f"coap://{self.ip_address}{STATE_V0}"
+        request = Message(code=PUT, uri=uri, payload=state.value.to_bytes(1))
+        response = await self.send_request(request)
+        self.logger.info(f"Set state response: {response}")
 
     async def get_network_config(self) -> NetworkConfig:
         """Read the network config.

@@ -51,7 +51,6 @@ class PointClassification:
     def __str__(self) -> str:
         text = f"0x{self.value:02X}"
         if self.value != 0:
-            text += "("
             fields = []
             if self.point_in_protective_zone:
                 fields.append("P")
@@ -61,8 +60,10 @@ class PointClassification:
                 fields.append("O")
             if self.point_in_exclusion_zone:
                 fields.append("E")
-            text += ",".join(fields)
-            text += ")"
+            if fields:
+                text += "("
+                text += ",".join(fields)
+                text += ")"
         return text
 
     def __eq__(self, other) -> bool:
@@ -101,7 +102,7 @@ class Point:
         return math.sqrt(self.x * self.x + self.y * self.y + self.z * self.z)
 
     def __str__(self) -> str:
-        return f"{self.x:.2f}, {self.y:.2f}, {self.z:.2f}, {self.strength}, {self.classification})"
+        return f"([{self.x:.2f}, {self.y:.2f}, {self.z:.2f}], {self.strength}, {self.classification})"
 
     def __eq__(self, __value) -> bool:
         epsilon = 1e-3
