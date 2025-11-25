@@ -12,19 +12,40 @@
           "divisions": 10,
           "lineWidth": 1,
           "color": "#248eff",
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0],
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
           "order": 1
         }
       },
       "cameraState": {
-        "perspective": true,
         "distance": 10,
+        "perspective": true,
         "phi": 60,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
         "thetaOffset": 135,
-        "targetOffset": [0, 0, 0],
-        "target": [0, 0, 0],
-        "targetOrientation": [0, 0, 0, 1],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
@@ -52,6 +73,15 @@
           "colorMode": "colormap",
           "colorMap": "turbo",
           "pointSize": 8
+        },
+        "/adar/zone/inner_warning_zone": {
+          "visible": true
+        },
+        "/adar/zone/outer_warning_zone": {
+          "visible": true
+        },
+        "/adar/zone/protective_zone": {
+          "visible": true
         }
       },
       "publish": {
@@ -77,19 +107,40 @@
           "divisions": 10,
           "lineWidth": 1,
           "color": "#248eff",
-          "position": [0, 0, 0],
-          "rotation": [0, 0, 0],
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotation": [
+            0,
+            0,
+            0
+          ],
           "order": 1
         }
       },
       "cameraState": {
-        "perspective": false,
         "distance": 11.974738784739927,
+        "perspective": false,
         "phi": 47.86026573942242,
+        "target": [
+          0,
+          0,
+          0
+        ],
+        "targetOffset": [
+          0,
+          0,
+          0
+        ],
+        "targetOrientation": [
+          0,
+          0,
+          0,
+          1
+        ],
         "thetaOffset": 90,
-        "targetOffset": [0, 0, 0],
-        "target": [0, 0, 0],
-        "targetOrientation": [0, 0, 0, 1],
         "fovy": 45,
         "near": 0.5,
         "far": 5000
@@ -117,6 +168,15 @@
           "colorMode": "colormap",
           "colorMap": "turbo",
           "pointSize": 8
+        },
+        "/adar/zone/inner_warning_zone": {
+          "visible": true
+        },
+        "/adar/zone/outer_warning_zone": {
+          "visible": true
+        },
+        "/adar/zone/protective_zone": {
+          "visible": true
         }
       },
       "publish": {
