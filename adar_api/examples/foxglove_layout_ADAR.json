@@ -26,16 +26,15 @@
         }
       },
       "cameraState": {
+        "distance": 10,
         "perspective": true,
-        "distance": 9.499999999999964,
-        "phi": 60.000000000000085,
-        "thetaOffset": 135,
-        "targetOffset": [
-          0.016889138565874283,
-          -0.016889138565874283,
+        "phi": 60,
+        "target": [
+          0,
+          0,
           0
         ],
-        "target": [
+        "targetOffset": [
           0,
           0,
           0
@@ -46,6 +45,7 @@
           0,
           1
         ],
+        "thetaOffset": 135,
         "fovy": 45,
         "near": 0.5,
         "far": 5000
