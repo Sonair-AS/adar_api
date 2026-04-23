@@ -1,6 +1,6 @@
 # ADAR API Python Package
 
-A Python package for communicating with the ADAR 3D Ultrasonic Sensor via Constrained Application Protocol (CoAP)).
+A Python package for communicating with the ADAR 3D Ultrasonic Sensor via Constrained Application Protocol (CoAP).
 
 ## Overview
 
@@ -15,35 +15,40 @@ This package serves two main purposes:
 - [Installation](#installation)
 - [Network Requirements](#network-requirements)
 - [Quick Start](#quick-start)
+  - [Point Cloud Publisher](#point-cloud-publisher)
+  - [ROS Integration](#ros-integration)
+  - [ADAR API](#adar-api)
 - [API Reference](#api-reference) - _For Python developers_
-- [Coordinate System](#coordinate-system)
-- [Error Handling](#error-handling)
-- [Advanced Usage](#advanced-usage)
+  - [Error Handling](#error-handling)
+  - [Usage Examples](#usage-examples)
 - [CoAP Resources and Data Formats](#coap-resources-and-data-formats) - _For protocol reference_
 
 ## Installation
 
-### Quick Installation
+> **Compatibility:** ADAR API v2.0.0-rc is a breaking change and requires **firmware 1.8.3 or newer**. It is not backwards-compatible with firmware 1.1.x. If you are running firmware 1.1.1 or older, see [From PyPI](#from-pypi-firmware-111-or-older) below.
 
-Install the ADAR API package from PyPI:
+**Prerequisites:** [Python 3.11+](https://www.python.org/downloads/) and [Git](https://git-scm.com/downloads) must be installed.
 
-```bash
-pip install adar-api
-```
+### From Git (firmware 1.8.3 or newer)
 
-### Recommended: Using a Virtual Environment
+Install from the Git repository:
 
-For better dependency management, it's recommended to use a virtual environment:
+1. **Clone the repository and check out the correct branch:**
 
-1. **Create a virtual environment:**
+   ```bash
+   git clone -b <branch> https://github.com/Sonair-AS/adar_api.git
+   cd adar_api
+   ```
 
-   The example below will create a virtual environment named `.venv` (standard naming convention) in the current working directory
+   > Replace `<branch>` with the branch name provided in the release notes (e.g. `v2.0.0-rc`).
+
+2. **Create and activate a virtual environment:**
 
    ```bash
    python -m venv .venv
    ```
 
-2. **Activate the virtual environment:**
+   Then activate it:
 
    **Linux/macOS:**
 
@@ -60,14 +65,42 @@ For better dependency management, it's recommended to use a virtual environment:
    **Windows (PowerShell):**
 
    ```PowerShell
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force # Allow script execution for the current terminal session
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
    .venv\Scripts\Activate.ps1
    ```
 
 3. **Install the package:**
+
    ```bash
-   pip install adar-api
+   pip install .
    ```
+
+4. **Verify the installation:**
+
+   ```bash
+   python -c "from adar_api import Adar; print('adar_api installed successfully')"
+   ```
+
+#### Updating to a newer release
+
+When a new release or version is available, update your local clone:
+
+```bash
+cd adar_api
+git fetch
+git pull
+pip install .
+```
+
+### From PyPI (firmware 1.1.1 or older)
+
+For firmware version 1.1.1 or older, install from PyPI:
+
+```bash
+pip install adar-api
+```
+
+> **Note:** The PyPI version (1.x) is only compatible with firmware 1.1.1 or older. If you have firmware 1.8.3 or newer, you must use the [Git installation](#from-git-firmware-183-or-newer) method above.
 
 **Note:** You need to activate the virtual environment each time you want to use the `pointcloud-publisher` command or the ADAR API in a new terminal session. To deactivate the virtual environment, simply type `deactivate`.
 
@@ -96,7 +129,7 @@ pointcloud-publisher 10.20.30.40
 #### Advanced Usage
 
 Specify a custom Foxglove server host:
-This can be useful if you want to publish the pointcloud to a different computer than the one which is running the the pointcloud-publisher script.
+This can be useful if you want to publish the pointcloud to a different computer than the one running the pointcloud-publisher script.
 
 ```bash
 pointcloud-publisher <ADAR_IP_ADDRESS> --foxglove-host <HOST_IP>
@@ -145,7 +178,7 @@ For custom integrations, use the Python API directly:
 
 ```python
 import asyncio
-from adar_api import Adar
+from adar_api import Adar, CoapPointCloud
 from aiocoap import Context
 
 async def main():
@@ -161,7 +194,7 @@ async def main():
     print(f"Firmware: {device_info.firmware_version}")
 
     # Get single point cloud frame
-    point_cloud = await adar.get_point_cloud()
+    point_cloud: CoapPointCloud = await adar.get_point_cloud()
     print(f"Received {len(point_cloud.points)} points")
 
     # Continuous observation
@@ -224,22 +257,35 @@ from aiocoap import Message, GET
 
 # Access the underlying CoAP request method
 response = await adar.send_request(
-    Message(code=GET, uri=f"coap://{adar.ip_address}/status/v0")
+    Message(code=GET, uri=f"coap://{adar.ip_address}/status/v1")
 )
 ```
 
 #### Network Configuration
 
 ```python
+from adar_api import NetworkConfig
+
 # Get current configuration
 config = await adar.get_network_config()
-print(f"Current DHCP setting: {config.dhcp_enabled}")
+print(f"DHCP: {config.dhcp_enabled}")
+print(f"Static IP: {config.static_ip}")
+print(f"Device Tag: {config.device_tag}")
 
-# Modify network config
-config.dhcp_enabled = True
+# To change the network configuration, create a new NetworkConfig with the desired parameters.
+# Note: modifying attributes on an existing NetworkConfig does not update the underlying binary
+# data. Always construct a new NetworkConfig when writing changes.
+new_config = NetworkConfig(
+    dhcp_enabled=False,
+    static_ip="10.20.30.50",
+    subnet_mask="255.255.255.0",
+    gateway="10.20.30.1",
+    device_tag="my-sensor",
+)
 
-# Apply modified configuration (device will reboot and might be on a different network than before)
-await adar.set_network_config(config)
+# Apply configuration (requires login, device will reboot)
+await adar.login(password="your_password")
+await adar.set_network_config(new_config)
 ```
 
 #### Transmission Code Configuration
@@ -249,9 +295,11 @@ await adar.set_network_config(config)
 code_id = await adar.get_transmission_code_id()
 print(f"Current transmission code: {code_id}")
 
-# Set transmission code (valid values: 1, 2, 4, 8)
+# Set transmission code ID (valid values: 1, 2, 4, 8)
 await adar.set_transmission_code_id(4)
 ```
+
+> **Note:** The Python API uses **code IDs** (1, 2, 4, 8), while the CoAP protocol uses **code indices** (0, 1, 2, 3). The relationship is: code ID = 2^index. The Python API handles this conversion automatically.
 
 ## CoAP Resources and Data Formats
 
@@ -265,17 +313,23 @@ coap://<device_ip>/<resource>/<version>
 
 ### Resource Reference
 
-| Resource                | Method      | Description            | Response Format                                 |
-| ----------------------- | ----------- | ---------------------- | ----------------------------------------------- |
-| `/pointcloud/v0`        | GET/OBSERVE | 3D point cloud data    | [Point Cloud Format](#point-cloud-format)       |
-| `/status/v0`            | GET         | Device status          | [Device Status Format](#device-status-format)   |
-| `/device_info/v0`       | GET         | Device identification  | [Device Info Format](#device-info-format)       |
-| `/network_config/v0`    | GET/PUT     | Network configuration  | [Network Config Format](#network-config-format) |
-| `/statistics/v0`        | GET         | Operational statistics | [Statistics Format](#statistics-format)         |
-| `/errors/v0`            | GET         | Device error codes     | [Error Format](#error-format)                   |
-| `/transmission_code/v0` | GET/PUT     | Transmission code ID   | Single byte. Legal values: 1, 2, 4, 8           |
-| `/factory_reset/v0`     | PUT         | Factory reset          | Empty payload                                   |
-| `/observers/v0`         | DELETE      | Clear all observers    | Empty payload                                   |
+| Resource                | Method      | Description             | Response Format                                 |
+| ----------------------- | ----------- | ----------------------- | ----------------------------------------------- |
+| `/pointcloud/v1`        | GET/OBSERVE | 3D point cloud data     | [Point Cloud Format](#point-cloud-format)       |
+| `/status/v1`            | GET         | Device status           | [Device Status Format](#device-status-format)   |
+| `/device_info/v1`       | GET         | Device identification   | [Device Info Format](#device-info-format)       |
+| `/network_config/v1`    | GET/PUT     | Network configuration   | [Network Config Format](#network-config-format) |
+| `/config/crc/v1`        | GET         | Configuration CRC       | 4 bytes, uint32, little-endian                  |
+| `/errors/v1`            | GET         | Device error codes      | [Error Format](#error-format)                   |
+| `/transmission_code/v1` | GET/PUT     | Transmission code index | Single byte. Legal values: 0, 1, 2, 3           |
+| `/login/v1`             | GET/PUT     | Authentication          | GET: login token; PUT: auth token               |
+| `/logout/v1`            | PUT         | End session             | Empty payload                                   |
+| `/state/v1`             | PUT         | Set device state        | Single byte (3=Enabled, 4=Disabled, 5=Config)   |
+| `/factory_reset/v1`     | PUT         | Factory reset           | Empty payload                                   |
+| `/reboot/v1`            | PUT         | Reboot device           | Empty payload                                   |
+| `/observers/v1`         | DELETE      | Clear all observers     | Empty payload                                   |
+
+> **Note:** Legacy v0 endpoints are still available for backwards compatibility but may be removed in a future release. New integrations should use the versions listed above.
 
 ### Data Format Specifications (little-endian)
 
@@ -321,8 +375,6 @@ _Note: The Python API converts coordinates from millimeters to meters._
 | 2          | Transmission Code | uint8  | Transmission code index (0-3, where code ID = 2^index) |
 | 3          | Zone Status       | uint8  | See [Zone Status Flags](#zone-status-flags)            |
 | 4-7        | Device Error      | uint32 | Error code, little-endian                              |
-
-_Note: This format uses a transmission code index (0-3), while the [Transmission Code](#transmission-code-format) resource uses a code ID (1, 2, 4, 8)._
 
 ##### Device States
 
@@ -380,25 +432,6 @@ Variable-length format with [length-prefixed strings](#length-prefixed-string-fo
 | -------- | ---------------- | ------------ | ------------------------------------ |
 | Reserved | Sync server mode | Sync enabled | Static IP enabled (0=DHCP, 1=Static) |
 
-#### Statistics Format
-
-44-byte binary structure:
-
-| Byte Range | Field                                   | Type                                | Description                                  |
-| ---------- | --------------------------------------- | ----------------------------------- | -------------------------------------------- |
-| 0-11       | Uptime                                  | [Duration format](#duration-format) | Device uptime                                |
-| 12-19      | Total Number of Pings                   | uint64                              | Total pings count, little-endian             |
-| 20-27      | Pings with Object in Protective Zone    | uint64                              | Protective zone detections, little-endian    |
-| 28-35      | Pings with Object in Inner Warning Zone | uint64                              | Inner warning zone detections, little-endian |
-| 36-43      | Pings with Object in Outer Warning Zone | uint64                              | Outer warning zone detections, little-endian |
-
-##### Duration Format
-
-| Byte Range | Field       | Type   | Description                          |
-| ---------- | ----------- | ------ | ------------------------------------ |
-| 0-7        | Seconds     | uint64 | Seconds component, little-endian     |
-| 8-11       | Nanoseconds | uint32 | Nanoseconds component, little-endian |
-
 #### Error Format
 
 Variable-length format with error bitmask and description strings:
@@ -418,11 +451,9 @@ Variable-length format with error bitmask and description strings:
 
 Single byte payload:
 
-| Byte | Field   | Type  | Description                          |
-| ---- | ------- | ----- | ------------------------------------ |
-| 0    | Code ID | uint8 | Transmission code ID (1, 2, 4, or 8) |
-
-_Note: This resource uses the code ID (which is a binary bitmask), while the [Device Status](#device-status-format) uses a transmission code index (0-3) where the code ID is 2^index._
+| Byte | Field      | Type  | Description                             |
+| ---- | ---------- | ----- | --------------------------------------- |
+| 0    | Code index | uint8 | Transmission code Index (0, 1, 2, or 3) |
 
 ### CoAP Response Codes
 
@@ -437,7 +468,7 @@ When working with ADAR resources, you may encounter these CoAP response codes:
 #### Client Error Responses
 
 - **`4.00 Bad Request`** - Malformed request or invalid payload data
-- **`4.04 Not Found`** - Resource does not exist (e.g., typos in resource paths like `/pointclouds/v0` instead of `/pointcloud/v0`) or unauthorized access
+- **`4.04 Not Found`** - Resource does not exist (e.g., typos in resource paths like `/pointclouds/v1` instead of `/pointcloud/v1`) or unauthorized access
 - **`4.05 Method Not Allowed`** - Invalid HTTP method for the resource (e.g., PUT to a read-only resource)
 - **`4.08 Request Entity Incomplete`** - Missing or incomplete payload for operations that require data
 - **`4.29 Too Many Requests`** - Observer limit exceeded (max 2 point cloud observers)

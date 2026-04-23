@@ -20,7 +20,6 @@ s is the strength of the point and is encoded as a 16-bit unsigned integer.
 r is reserved and shall be ignored.
 c is point classification and is encoded as a 8-bit unsigned integer. See PointClassification class for details.
 
-
 All values in payload are encoded as little endian.
 """
 
@@ -36,6 +35,21 @@ logger = logging.getLogger(__name__)
 
 
 class PointClassification:
+    """Point classification flags parsed from the classification byte.
+
+    Bit layout:
+        - Bit 0 (0x01): point_in_protective_zone
+        - Bit 1 (0x02): point_in_inner_warning_zone
+        - Bit 2 (0x04): point_in_outer_warning_zone
+        - Bit 3 (0x08): point_in_exclusion_zone
+        - Bit 4 (0x10): not_classified - set when no zone preset is configured
+
+    Classification values:
+        - 0x10: No zone preset configured
+        - 0x00: Point is outside all configured zones
+        - Other: Point is in one or more zones (corresponding bits set)
+    """
+
     def __init__(self, value: int):
         """Initialize point classification from integer value.
 
@@ -43,10 +57,11 @@ class PointClassification:
             value: Integer value representing point classification flags
         """
         self.value = value
-        self.point_in_protective_zone = value & 0x01
-        self.point_in_inner_warning_zone = value & 0x02
-        self.point_in_outer_warning_zone = value & 0x04
-        self.point_in_exclusion_zone = value & 0x08
+        self.point_in_protective_zone = bool(value & 0x01)
+        self.point_in_inner_warning_zone = bool(value & 0x02)
+        self.point_in_outer_warning_zone = bool(value & 0x04)
+        self.point_in_exclusion_zone = bool(value & 0x08)
+        self.not_classified = bool(value & 0x10)
 
     def __str__(self) -> str:
         text = f"0x{self.value:02X}"
@@ -60,6 +75,8 @@ class PointClassification:
                 fields.append("O")
             if self.point_in_exclusion_zone:
                 fields.append("E")
+            if self.not_classified:
+                fields.append("N")
             if fields:
                 text += "("
                 text += ",".join(fields)
@@ -169,7 +186,7 @@ class CoapPointCloud:
         try:
             status = DeviceStatus(state_data)
         except (ValueError, AssertionError) as e:
-            logger.exception(f"Failed to decode '{state_data}'  into DeviceStatus: {e}")
+            logger.exception("Failed to decode '%s' into DeviceStatus: %s", state_data, e)
             raise
 
         if len(point_data) > 0:
