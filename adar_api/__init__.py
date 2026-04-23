@@ -4,9 +4,7 @@ from .coap_observer import CoapObserver
 from .coap_pointcloud import CoapPointCloud, Point, PointClassification
 from .device_info import DeviceInfo
 from .device_status import DeviceStatus, DeviceState, ZoneStatus
-from .duration import Duration
 from .network_config import NetworkConfig
-from .statistics import Statistics
 
 __all__ = [
     "DeviceStatus",
@@ -21,7 +19,4 @@ __all__ = [
     "NetworkConfig",
     "Adar",
     "DeviceInfo",
-    "Duration",
-    "Statistics",
-    "coap_resources",
 ]

@@ -7,16 +7,19 @@ Features:
 - Initializes a Foxglove server for visualization.
 - Observes point cloud data from an ADAR device via CoAP.
 - Publishes point cloud data to a specified topic.
+- Optionally publishes zone visualization from a config file.
 
 Usage:
-    python pointcloud_to_foxglove.py <ipaddr> [--foxglove-host <host>]
+    python pointcloud_to_foxglove.py <ipaddr> [--foxglove-host <host>] [--config-path <path>]
 
 Arguments:
     ipaddr: The IP address of the ADAR device.
     --foxglove-host: The host IP address for the Foxglove server (default: 127.0.0.1).
+    --config-path: Path to the ADAR device configuration file for zone visualization (default: None).
 
 Example:
-    python pointcloud_to_foxglove.py 10.14.15.68 --foxglove-host 127.0.0.2
+    python pointcloud_to_foxglove.py 10.20.30.40 --foxglove-host 127.0.0.2
+    python pointcloud_to_foxglove.py 10.20.30.40 --config-path config.adar
 """
 
 import argparse
@@ -42,13 +45,10 @@ ZONE_TOPIC = "/adar/zone"
 
 
 async def async_main() -> None:
-    """
-    Main asynchronous entry point for the script.
+    """Main asynchronous entry point for the script.
 
-    - Parses command-line arguments.
-    - Initializes the Foxglove server.
-    - Starts the CoAP loop to observe and publish point cloud data and device status.
-    - Publishes zone data from a configuration file.
+    Parses command-line arguments, initializes the Foxglove server, and starts
+    the CoAP loop to observe and publish point cloud data and device status.
 
     Raises:
         SystemExit: If required arguments are missing or invalid.
@@ -89,15 +89,14 @@ async def async_main() -> None:
 
 
 async def zone_publisher_task(config_path: str, zone_publisher: ZonePublisher) -> None:
-    """
-    Background task that publishes zone configuration every 5 seconds.
+    """Background task that publishes zone configuration every 5 seconds.
+
     Only reads and recalculates zones if the config file has been modified.
 
     Args:
-        config_path: Path to the configuration file
-        zone_publisher: ZonePublisher instance to use for publishing
+        config_path: Path to the configuration file.
+        zone_publisher: ZonePublisher instance to use for publishing.
     """
-
     print("Starting zone publisher background task...")
 
     last_mtime = None
@@ -135,30 +134,28 @@ async def zone_publisher_task(config_path: str, zone_publisher: ZonePublisher) -
         await asyncio.sleep(5)
 
 
-async def coap_loop(args) -> None:
-    """
-    Observes point cloud data from an ADAR device and publishes it to a Foxglove server.
+async def coap_loop(args: argparse.Namespace) -> None:
+    """Observe point cloud data from an ADAR device and publish to Foxglove.
 
     Args:
-        args: Parsed command-line arguments containing:
-            - ipaddr: IP address of the ADAR device.
-            - foxglove_host: Host IP address for the Foxglove server.
-            - config_path: Path to the ADAR device configuration file.
-    Prints:
-        - Status messages indicating the number of messages published.
+        args: Parsed command-line arguments containing ipaddr, foxglove_host,
+            and config_path.
     """
     print("Starting CoAP observer...")
     msg_count = 0
+    retry_delay = 0.5
+    max_retry_delay = 30.0
 
     # Initialize the point cloud publisher
     pointcloud_publisher = PointCloudPublisher(topic=POINTCLOUD_TOPIC, auto_publish_transforms=True)
     device_status_publisher = DeviceStatusPublisher(topic=DEVICE_STATUS_TOPIC)
+
     # Start zone publisher background task if config is provided
     zone_publisher = None
+    zone_task = None
     if args.config_path:
         zone_publisher = ZonePublisher(topic=ZONE_TOPIC)
-        # Create background task to publish zones every 5 seconds
-        _zone_task = asyncio.create_task(zone_publisher_task(args.config_path, zone_publisher))
+        zone_task = asyncio.create_task(zone_publisher_task(args.config_path, zone_publisher))
 
     # Create a CoAP client context
     ctx = await Context.create_client_context()
@@ -167,12 +164,15 @@ async def coap_loop(args) -> None:
         # Initialize the ADAR device connection
         adar = Adar(ctx, args.ipaddr)
 
-        print(f"Connected to ADAR device at {args.ipaddr}")
+        print(f"Initialized ADAR client for {args.ipaddr}")
 
         while True:
             try:
                 # Observe point cloud data and publish it
                 async for coap_msg in adar.observe_point_cloud():
+                    # Reset retry delay on successful message
+                    retry_delay = 0.5
+
                     try:
                         pointcloud_publisher.publish(coap_msg.points, coap_msg.timestamp)
                         device_status_publisher.publish(coap_msg.status)
@@ -196,22 +196,32 @@ async def coap_loop(args) -> None:
                 raise
 
             except asyncio.CancelledError:
-                # Task was cancelled (usually during shutdown)
                 print("Task cancelled, shutting down...")
                 raise
 
             except Exception as e:
-                # Connection error - wait a bit and retry
-                print(f"Error: {e}. Retrying in 0.5 seconds...", file=sys.stderr)
-                await asyncio.sleep(0.5)
+                # Connection error - wait with exponential backoff and retry
+                print(f"Error: {e}. Retrying in {retry_delay:.1f} seconds...", file=sys.stderr)
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, max_retry_delay)
 
     finally:
+        # Cancel background task if running
+        if zone_task is not None:
+            zone_task.cancel()
+            try:
+                await zone_task
+            except asyncio.CancelledError:
+                pass
+
         # Clean up CoAP context
         print("Cleaning up...")
+        await adar.delete_observers()
         await ctx.shutdown()
 
 
-def main():
+def main() -> None:
+    """Entry point for the pointcloud-publisher command."""
     asyncio.run(async_main())
     print("All done.")
 

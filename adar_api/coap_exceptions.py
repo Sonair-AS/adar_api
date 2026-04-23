@@ -15,3 +15,11 @@ class CoapErrorException(CoapException):
         """
         super().__init__(*args)
         self.response: Message = kwargs.get("response")
+
+    def __str__(self):
+        message = "CoapErrorException"
+        if self.response:
+            message += f": {self.response}"
+            if self.response.payload:
+                message += f". Payload: {self.response.payload}"
+        return message

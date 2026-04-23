@@ -17,7 +17,7 @@ Arguments:
     device_ip: The IP address of the ADAR device (required)
 
 Example:
-    ros2 run sonair_adar point_cloud_publisher --ros-args -p device_ip:=10.14.15.68
+    ros2 run sonair_adar point_cloud_publisher --ros-args -p device_ip:=10.20.30.40
 """
 
 import asyncio

@@ -8,7 +8,11 @@ from aiocoap import Message, GET, Context, TransportTuning
 from aiocoap.protocol import BlockwiseRequest, Request
 
 from .adar import Adar
+from .coap_crc import verify_and_strip_crc
 from .coap_exceptions import CoapErrorException
+
+# Use default inter-notification timeout rule in ``messages`` (see docstring).
+_DEFAULT_INTER_NOTIFICATION_TIMEOUT = object()
 
 
 class Observe(IntEnum):
@@ -30,7 +34,7 @@ class CoapObserver:
 
     Typical usage:
 
-    async with CoapObserver(adar, "/point_cloud/v0") as observer:
+    async with CoapObserver(adar, "/pointcloud/v1") as observer:
         async for msg in observer.messages():
             points = PointCloud(msg)
 
@@ -45,17 +49,24 @@ class CoapObserver:
 
         Args:
             adar: The ADAR device instance to observe
-            path: The CoAP path to observe (e.g., "/point_cloud/v0")
+            path: The CoAP path to observe (e.g., "/pointcloud/v1")
         """
         self._adar = adar
         self.ipaddr = adar.ip_address
         self.path = path
         self._context: Context | None = None
         self._cancelled = False
+        self._stopped = False
         self._current_request = None
         self.logger = logging.getLogger(f"{adar.device_tag}-Observe")
 
-    async def messages(self, keep_running: bool = False, msg_count: int | None = None) -> AsyncGenerator[bytes, None]:
+    async def messages(
+        self,
+        keep_running: bool = False,
+        msg_count: int | None = None,
+        *,
+        inter_notification_timeout: float | None | object = _DEFAULT_INTER_NOTIFICATION_TIMEOUT,
+    ) -> AsyncGenerator[bytes, None]:
         """Listen for messages and yield them as they arrive.
 
         For blocking and compute intensive tasks use asyncio.to_thread to avoid blocking the network io task. See
@@ -65,7 +76,12 @@ class CoapObserver:
 
         Args:
             keep_running: If True, the observer will attempt to keep running - i.e. ignore errors and keep trying to reconnect.
-            msg_count: The number of messages to receive before stopping. If None, the observer will run until cancelled.
+            msg_count: The number of messages to receive before stopping. If None, the observer will run until
+                cancelled, and there is no timeout between consecutive notifications (suited to gated streams).
+                If set, at most 2 seconds may elapse between notifications before a timeout/reconnect path runs
+                (unless ``inter_notification_timeout`` overrides this).
+            inter_notification_timeout: Maximum seconds to wait for each notification. ``None`` means wait indefinitely.
+                If omitted, the default is no limit when ``msg_count`` is None, otherwise 2 seconds.
 
         Yields:
             bytes: Raw message payload data
@@ -81,7 +97,7 @@ class CoapObserver:
                 try:
                     (self._current_request, _response) = await self._send_message(start_observe_message)
                 except CoapErrorException as e:
-                    self.logger.warning(f"Failed to connect to server: {e}")
+                    self.logger.warning("Failed to connect to server: %s", e)
                     if keep_running or connection_attempts < 10:
                         connection_attempts += 1
                         self.logger.warning("Trying again...")
@@ -89,28 +105,45 @@ class CoapObserver:
                     raise
 
                 pr_iter = aiter(self._current_request.observation)
+                if inter_notification_timeout is _DEFAULT_INTER_NOTIFICATION_TIMEOUT:
+                    # When collecting forever (msg_count None), do not bound time between notifications.
+                    # Gated resources may be silent for a long time; a short timeout would break the inner
+                    # loop and re-register observe, dropping the subscription.
+                    observation_timeout = None if msg_count is None else 2.0
+                elif inter_notification_timeout is None:
+                    observation_timeout = None
+                else:
+                    observation_timeout = float(inter_notification_timeout)
                 while msg_count != cnt and not self._cancelled:
                     try:
                         # NOTE:
                         # This does not accumulate observations, so if the next observation in a sequence is not
                         # processed in time it is dropped in favour of the following observation.
-                        obs = await asyncio.wait_for(anext(pr_iter), timeout=2)
+                        obs = await asyncio.wait_for(anext(pr_iter), timeout=observation_timeout)
                         if not obs.code.is_successful():
-                            self.logger.error(f"Error: {obs.code} received")
+                            self.logger.error("Error: %s received", obs.code)
                             if keep_running:
                                 break
                             raise CoapErrorException(response=obs)
+
+                        # Verify and strip CRC from response if there is a payload
+                        if len(obs.payload) > 4:
+                            obs.payload, crc_valid = verify_and_strip_crc(self.path, obs.payload)
+                            if not crc_valid:
+                                self.logger.error("CRC mismatch for %s", self.path)
+                                # Skip the message if the CRC is bad
+                                continue
 
                         yield obs.payload
 
                         cnt += 1
                         if msg_count == cnt:
-                            self.logger.info(f"Received {cnt} messages, stopping.")
+                            self.logger.info("Received %d messages, stopping.", cnt)
                             break
                     except asyncio.TimeoutError:
                         if self._cancelled:
                             break
-                        self.logger.error(f"Timeout waiting for {cnt} messages")
+                        self.logger.error("Timeout waiting for %d messages", cnt)
                         if keep_running:
                             break
                         raise
@@ -119,30 +152,35 @@ class CoapObserver:
                 await self.stop()
 
     async def stop(self):
-        """Stop the observer and clean up resources."""
+        """Stop the observer and clean up resources.
+
+        Safe to call multiple times — only the first call performs cleanup.
+        The de-registration GET (Observe=1) is sent before shutting down the
+        CoAP context so the sensor stops sending notifications.
+        """
+        if self._stopped:
+            return
+        self._stopped = True
         self._cancelled = True
 
-        try:
-            # Cancel current request if it exists
-            if self._current_request is not None:
-                self._current_request.cancelled = True
+        if self._current_request is not None:
+            self._current_request.cancelled = True
+            self._current_request = None
 
-            # Deregister the observer only if context exists
-            if self._context is not None:
+        if self._context is not None:
+            try:
                 self.logger.info("De-registering observer")
                 stop_observe_message = self._make_get_request(Observe.NoObserve)
                 pr = self._context.request(stop_observe_message)
-                await pr.response
-        except Exception as e:
-            self.logger.warning(f"Error during observer shutdown: {e}")
-            raise
-        finally:
-            if self._context is not None:
+                await asyncio.wait_for(pr.response, timeout=2.0)
+            except Exception as e:
+                self.logger.warning("Observer de-registration failed: %s", e)
+            finally:
+                ctx, self._context = self._context, None
                 try:
-                    await self._context.shutdown()
+                    await ctx.shutdown()
                 except Exception as e:
-                    self.logger.warning(f"Error shutting down context: {e}")
-                self._context = None
+                    self.logger.warning("Error shutting down CoAP context: %s", e)
 
     async def _ensure_coap_context(self) -> None:
         """Ensure we have a valid CoAP context."""
@@ -163,10 +201,12 @@ class CoapObserver:
                 transport_tuning = FastTimeout()
             case Observe.NoObserve:
                 transport_tuning = TransportTuning()
-
+        token = ""
+        if self._adar.auth_token is not None:
+            token = f"?t={self._adar.auth_token}"
         return Message(
             code=GET,
-            uri=f"coap://{self._adar.ip_address}{self.path}",
+            uri=f"coap://{self._adar.ip_address}{self.path}{token}",
             observe=int(observe),  # 0 = observe, 1 = no observe
             transport_tuning=transport_tuning,
         )
@@ -176,7 +216,7 @@ class CoapObserver:
         request = self._context.request(msg)
         response_message = await request.response
         if not response_message.code.is_successful():
-            self.logger.error(f"Error: {response_message.code} received")
+            self.logger.error("Error: %s received", response_message.code)
             raise CoapErrorException(response=response_message)
         return request, response_message
 
