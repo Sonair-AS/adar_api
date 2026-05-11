@@ -5,6 +5,35 @@ All notable changes to ADAR API will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and ADAR API adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] 2026-05-11
+
+> **Note:** This version supports both v0 and v1 endpoints. The package automatically detects the endpoint version supported by the device. Features requiring authentication (login, state control, etc.) are only available on v1 endpoints.
+
+### Added
+
+- **CRC validation**: New `coap_crc` module for CRC-32 validation of CoAP messages. Payloads are now verified for data integrity on receipt. **Note for non-Python integrations:** All v1 CoAP responses now include a trailing 4-byte CRC that must be stripped before parsing. PUT request payloads must also include a CRC suffix. See `coap_crc.py` for the algorithm.
+- **Authentication**: New `login()`, `logout()`, and `get_login_token()` methods for device authentication. Required for write operations (state changes, configuration, factory reset).
+- **Device state control**: New `set_state()` method to transition the device between Enabled and Disabled states.
+- **Device errors**: New `get_device_errors()` method and `DeviceErrors` class for retrieving and parsing device error information.
+- **Reboot**: New `reboot()` method for remote device reboot.
+- **Observer management**: New `delete_observers()` method to clear all active CoAP observers on the device.
+- **Device tag**: `NetworkConfig` now supports a `device_tag` field for identifying individual sensors.
+- **Sync configuration**: `NetworkConfig` now supports `sync_enabled` and `sync_server_enabled` flags for multi-device synchronization.
+
+### Changed
+
+- **CoAP resource versions**: All resources upgraded from v0 to v1. The Python package automatically detects the endpoint version and uses the correct resource paths. v0 resource constants are still exported for backwards compatibility with external scripts.
+- **NetworkConfig**: Fixed encoding to produce the correct 212-byte format expected by all shipped firmware. The previous encoding was undersized and would be rejected by the device.
+- **DeviceErrors**: Maximum error string length increased from 64 to 256 bytes, and maximum number of errors increased from 6 to 8. The wire format is unchanged (length-prefixed strings), but integrations with fixed-size buffers may need to be updated.
+- **set_state()**: No longer raises `ValueError` for invalid states. Validation is now performed by the device, which returns `CoapErrorException` on rejection.
+- **factory_reset()**: Changed from PUT to POST to match the device's expected method.
+- **pointcloud-to-foxglove**: Clean up on exit after subscribing to pointcloud data.
+- **README**: Updated installation instructions and corrected resource version references.
+
+### Removed
+
+- **Statistics**: Removed `Statistics` class, `Duration` class, and `get_statistics()` method. The `/statistics/v0` endpoint is no longer available on v1 devices.
+
 ## [1.2.0] 2025-11-13
 
 ### Added

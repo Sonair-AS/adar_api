@@ -1,6 +1,6 @@
 # ADAR API Python Package
 
-A Python package for communicating with the ADAR 3D Ultrasonic Sensor via Constrained Application Protocol (CoAP)).
+A Python package for communicating with the ADAR 3D Ultrasonic Sensor via Constrained Application Protocol (CoAP).
 
 ## Overview
 
@@ -15,13 +15,19 @@ This package serves two main purposes:
 - [Installation](#installation)
 - [Network Requirements](#network-requirements)
 - [Quick Start](#quick-start)
+  - [Point Cloud Publisher](#point-cloud-publisher)
+  - [ROS Integration](#ros-integration)
+  - [ADAR API](#adar-api)
 - [API Reference](#api-reference) - _For Python developers_
-- [Coordinate System](#coordinate-system)
-- [Error Handling](#error-handling)
-- [Advanced Usage](#advanced-usage)
+  - [Error Handling](#error-handling)
+  - [Usage Examples](#usage-examples)
 - [CoAP Resources and Data Formats](#coap-resources-and-data-formats) - _For protocol reference_
 
 ## Installation
+
+> **Compatibility:** ADAR API 2.0 supports both v0 and v1 endpoints. The package automatically detects the endpoint version supported by the device. Features requiring authentication (login, state control, reboot) are only available on v1 endpoints.
+
+**Prerequisites:** [Python 3.11+](https://www.python.org/downloads/) must be installed.
 
 ### Quick Installation
 
@@ -36,8 +42,6 @@ pip install adar-api
 For better dependency management, it's recommended to use a virtual environment:
 
 1. **Create a virtual environment:**
-
-   The example below will create a virtual environment named `.venv` (standard naming convention) in the current working directory
 
    ```bash
    python -m venv .venv
@@ -60,11 +64,12 @@ For better dependency management, it's recommended to use a virtual environment:
    **Windows (PowerShell):**
 
    ```PowerShell
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force # Allow script execution for the current terminal session
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process -Force
    .venv\Scripts\Activate.ps1
    ```
 
 3. **Install the package:**
+
    ```bash
    pip install adar-api
    ```
@@ -96,7 +101,7 @@ pointcloud-publisher 10.20.30.40
 #### Advanced Usage
 
 Specify a custom Foxglove server host:
-This can be useful if you want to publish the pointcloud to a different computer than the one which is running the the pointcloud-publisher script.
+This can be useful if you want to publish the pointcloud to a different computer than the one running the pointcloud-publisher script.
 
 ```bash
 pointcloud-publisher <ADAR_IP_ADDRESS> --foxglove-host <HOST_IP>
@@ -145,7 +150,7 @@ For custom integrations, use the Python API directly:
 
 ```python
 import asyncio
-from adar_api import Adar
+from adar_api import Adar, CoapPointCloud
 from aiocoap import Context
 
 async def main():
@@ -159,9 +164,11 @@ async def main():
     device_info = await adar.get_device_info()
     print(f"Device: {device_info.device_name}")
     print(f"Firmware: {device_info.firmware_version}")
+    print(f"Serial: {device_info.device_identification.serial_number}")
+    print(f"Hardware: {device_info.device_identification.hardware_version}")
 
     # Get single point cloud frame
-    point_cloud = await adar.get_point_cloud()
+    point_cloud: CoapPointCloud = await adar.get_point_cloud()
     print(f"Received {len(point_cloud.points)} points")
 
     # Continuous observation
@@ -224,22 +231,35 @@ from aiocoap import Message, GET
 
 # Access the underlying CoAP request method
 response = await adar.send_request(
-    Message(code=GET, uri=f"coap://{adar.ip_address}/status/v0")
+    Message(code=GET, uri=f"coap://{adar.ip_address}/status/v1")
 )
 ```
 
 #### Network Configuration
 
 ```python
+from adar_api import NetworkConfig
+
 # Get current configuration
 config = await adar.get_network_config()
-print(f"Current DHCP setting: {config.dhcp_enabled}")
+print(f"DHCP: {config.dhcp_enabled}")
+print(f"Static IP: {config.static_ip}")
+print(f"Device Tag: {config.device_tag}")
 
-# Modify network config
-config.dhcp_enabled = True
+# To change the network configuration, create a new NetworkConfig with the desired parameters.
+# Note: modifying attributes on an existing NetworkConfig does not update the underlying binary
+# data. Always construct a new NetworkConfig when writing changes.
+new_config = NetworkConfig(
+    dhcp_enabled=False,
+    static_ip="10.20.30.50",
+    subnet_mask="255.255.255.0",
+    gateway="10.20.30.1",
+    device_tag="my-sensor",
+)
 
-# Apply modified configuration (device will reboot and might be on a different network than before)
-await adar.set_network_config(config)
+# Apply configuration (requires login, device will reboot)
+await adar.login(password="your_password")
+await adar.set_network_config(new_config)
 ```
 
 #### Transmission Code Configuration
@@ -249,9 +269,11 @@ await adar.set_network_config(config)
 code_id = await adar.get_transmission_code_id()
 print(f"Current transmission code: {code_id}")
 
-# Set transmission code (valid values: 1, 2, 4, 8)
+# Set transmission code ID (valid values: 1, 2, 4, 8)
 await adar.set_transmission_code_id(4)
 ```
+
+> **Note:** The Python API uses **code IDs** (1, 2, 4, 8), while the CoAP protocol uses **code indices** (0, 1, 2, 3). The relationship is: code ID = 2^index. The Python API handles this conversion automatically.
 
 ## CoAP Resources and Data Formats
 
@@ -265,21 +287,97 @@ coap://<device_ip>/<resource>/<version>
 
 ### Resource Reference
 
-| Resource                | Method      | Description            | Response Format                                 |
-| ----------------------- | ----------- | ---------------------- | ----------------------------------------------- |
-| `/pointcloud/v0`        | GET/OBSERVE | 3D point cloud data    | [Point Cloud Format](#point-cloud-format)       |
-| `/status/v0`            | GET         | Device status          | [Device Status Format](#device-status-format)   |
-| `/device_info/v0`       | GET         | Device identification  | [Device Info Format](#device-info-format)       |
-| `/network_config/v0`    | GET/PUT     | Network configuration  | [Network Config Format](#network-config-format) |
-| `/statistics/v0`        | GET         | Operational statistics | [Statistics Format](#statistics-format)         |
-| `/errors/v0`            | GET         | Device error codes     | [Error Format](#error-format)                   |
-| `/transmission_code/v0` | GET/PUT     | Transmission code ID   | Single byte. Legal values: 1, 2, 4, 8           |
-| `/factory_reset/v0`     | PUT         | Factory reset          | Empty payload                                   |
-| `/observers/v0`         | DELETE      | Clear all observers    | Empty payload                                   |
+Resources that do not require authentication:
+
+| Resource                | Method        | Description              | Response Format                                 |
+| ----------------------- | -----------   | -----------------------  | ----------------------------------------------- |
+| `/pointcloud/v1`        | GET (Observe) | 3D point cloud data      | [Point Cloud Format](#point-cloud-format)       |
+| `/status/v1`            | GET           | Device status            | [Device Status Format](#device-status-format)   |
+| `/device_info/v1`       | GET           | Device identification    | [Device Info Format](#device-info-format)       |
+| `/network_config/v1`    | GET           | Network configuration    | [Network Config Format](#network-config-format) |
+| `/errors/v1`            | GET           | Device error codes       | [Error Format](#error-format)                   |
+| `/transmission_code/v1` | GET/PUT       | Transmission code index  | Single byte (0, 1, 2, or 3)                     |
+| `/protocol_hash/v1`     | GET           | Protocol version hash    | 4 bytes, uint32, little-endian                  |
+| `/state/v1`             | GET           | Current device state     | Single byte (see state values below)            |
+| `/login/v1`             | GET           | Login challenge token    | 8 bytes, uint64, little-endian                  |
+| `/observers/v1`         | DELETE        | Clear all observers      | Empty payload                                   |
+| `/logout/v1`            | PUT           | End session              | Empty payload                                   |
+| `/login/v1`             | PUT           | Submit login credentials | See [Authentication](#authentication)           |
+
+Resources that require authentication (see [Authentication](#authentication)):
+
+| Resource                | Method      | Required [State(s)](#device-states) | Description                        | Payload / Response Format                       |
+| ----------------------- | ----------- | ----------------------------------- | ---------------------------------- | ----------------------------------------------- |
+| `/state/v1`             | PUT         | Enabled, Disabled, Error, SelfTest  | Set device state                   | Single byte (3=Enabled, 4=Disabled)             |
+| `/network_config/v1`    | PUT         | Disabled                            | Update network configuration       | [Network Config Format](#network-config-format) |
+| `/firmware/v1`          | PUT         | Disabled, Fault                     | Upload firmware image              | Binary firmware image                           |
+| `/factory_reset/v1`     | POST        | Disabled                            | Factory reset                      | Empty payload                                   |
+| `/reboot/v1`            | PUT         | Any                                 | Reboot device                      | Empty payload                                   |
+
+> **Note:** Legacy v0 endpoints are deprecated and will return `5.01 Not Implemented`.
+
+### Payload CRC
+
+Every CoAP message that carries a non-empty payload, in both directions, includes a **CRC-32** checksum as the last 4 bytes. This applies to all resource paths and all methods (GET responses, OBSERVE notifications, PUT requests, etc.).
+The CRC covers both the **resource path** and the **payload data**, in that order.
+
+Messages with an empty payload (e.g., a GET request or a PUT to `/reboot/v1`) do not carry a CRC.
+
+The device will respond with **4.00 Bad Request** if a received message has an invalid or missing CRC.
+
+> **Note:** CRC was introduced together with the v1 resource paths. Older firmware with only v0 paths (e.g., `pointcloud/v0`) will accept messages with or without a trailing CRC, but will not include a CRC in its responses.
+> Clients that need to support both old and new firmware can use the endpoint version as an indicator: v0 paths -> no CRC in responses, v1+ paths -> CRC always present.
+
+#### CRC Calculation
+
+The CRC-32 is computed over:
+
+1. The **URI path** encoded as UTF-8, without leading or trailing slashes (e.g., `pointcloud/v1`)
+2. The **payload bytes** (excluding the CRC itself)
+
+The CRC algorithm is **CRC-32** (polynomial `0x04C11DB7`, also known as CRC-32/ISO-HDLC). The resulting 4-byte checksum is stored in **little-endian** byte order.
+
+#### Receiving (GET responses, OBSERVE notifications)
+
+When the device sends a response with a payload, the last 4 bytes are the CRC:
+
+```
+[ payload_data (N bytes) ] [ crc32 (4 bytes, little-endian) ]
+```
+
+To verify and decode:
+1. Split the raw payload into `data` (all bytes except the last 4) and `crc_bytes` (the last 4 bytes)
+2. Compute CRC-32 over the concatenation of the URI path bytes and `data`
+3. Compare with the received CRC (interpret `crc_bytes` as a little-endian uint32)
+4. If the CRC matches, parse `data` according to the resource's data format
+5. If the CRC does not match, treat it as a communication error
+
+#### Sending (PUT requests)
+
+When sending a PUT request with a payload, append the CRC as the last 4 bytes:
+
+1. Encode the payload `data` according to the resource's data format
+2. Compute CRC-32 over the concatenation of the URI path bytes and `data`
+3. Encode the CRC as 4 bytes in little-endian byte order and append them to `data`
+
+#### Example
+
+For a GET response on `status/v1` with 8 bytes of device status data (`00 03 00 00 00 00 00 00`):
+
+```
+CRC input:  "status/v1" (as UTF-8) ++ 00 03 00 00 00 00 00 00
+CRC output: 0xEF0EE5D0
+Wire payload: [ 00 03 00 00 00 00 00 00 ] [ D0 E5 0E EF ]
+                                            ^^ little-endian CRC
+```
+
+This can be used as a test vector when implementing CRC validation.
 
 ### Data Format Specifications (little-endian)
 
 #### Point Cloud Format
+
+The point cloud resource uses [CoAP Observe](https://datatracker.ietf.org/doc/html/rfc7641). A GET with the Observe Register option registers the client as an observer and starts continuous notifications. A GET without the Observe Register option deregisters the client and does **not** return a point cloud frame. The maximum number of concurrent observers is 2; additional attempts receive `4.29 Too Many Requests`.
 
 Binary payload structure:
 
@@ -306,23 +404,23 @@ _Note: The Python API converts coordinates from millimeters to meters._
 
 ##### Classification Flags
 
-| Bit 7-4  | Bit 3                   | Bit 2                       | Bit 1                       | Bit 0                    |
-| -------- | ----------------------- | --------------------------- | --------------------------- | ------------------------ |
-| Reserved | Point in Exclusion Zone | Point in Outer Warning Zone | Point in Inner Warning Zone | Point in Protective Zone |
+| Bit 7-5  | Bit 4          | Bit 3                   | Bit 2                       | Bit 1                       | Bit 0                    |
+| -------- | -------------- | ----------------------- | --------------------------- | --------------------------- | ------------------------ |
+| Reserved | Not Classified | Point in Exclusion Zone | Point in Outer Warning Zone | Point in Inner Warning Zone | Point in Protective Zone |
+
+_Note: Bit 4 (`Not Classified`) is set when no zone preset is configured on the device. When set, bits 0-3 are all zero._
 
 #### Device Status Format
 
 8-byte binary structure:
 
-| Byte Range | Field             | Type   | Description                                            |
-| ---------- | ----------------- | ------ | ------------------------------------------------------ |
-| 0          | Zone Selected     | uint8  | Currently selected zone                                |
-| 1          | Device State      | uint8  | See [Device States](#device-states)                    |
-| 2          | Transmission Code | uint8  | Transmission code index (0-3, where code ID = 2^index) |
-| 3          | Zone Status       | uint8  | See [Zone Status Flags](#zone-status-flags)            |
-| 4-7        | Device Error      | uint32 | Error code, little-endian                              |
-
-_Note: This format uses a transmission code index (0-3), while the [Transmission Code](#transmission-code-format) resource uses a code ID (1, 2, 4, 8)._
+| Byte Range | Field             | Type   | Description                                                                     |
+| ---------- | ----------------- | ------ | ------------------------------------------------------------------------------- |
+| 0          | Zone Selected     | uint8  | Currently selected zone                                                         |
+| 1          | Device State      | uint8  | See [Device States](#device-states)                                             |
+| 2          | Transmission Code | uint8  | Transmission code index (0-3, where code ID = 2^index)                          |
+| 3          | Zone Status       | uint8  | See [Zone Status Flags](#zone-status-flags)                                     |
+| 4-7        | Device Error      | uint32 | Error bitmask, little-endian. See [Device Error Bitmask](#device-error-bitmask) |
 
 ##### Device States
 
@@ -339,6 +437,36 @@ _Note: This format uses a transmission code index (0-3), while the [Transmission
 | Bit 7-3  | Bit 2                        | Bit 1                        | Bit 0                     |
 | -------- | ---------------------------- | ---------------------------- | ------------------------- |
 | Reserved | Object in Outer Warning Zone | Object in Inner Warning Zone | Object in Protective Zone |
+
+##### Device Error Bitmask
+
+The `Device Error` field (uint32, little-endian) is a bitmask where each bit indicates a specific error condition. When the device state is Error or Fault, this field provides details about the cause. Multiple bits may be set simultaneously.
+
+| Bit | Description                                                    |
+| --- | -------------------------------------------------------------- |
+| 0   | Zone select input doesn't match a zone ID in the active config |
+| 1   | Zone select input invalid for the active encoding scheme       |
+| 2   | No pulsing detected on zone select input                       |
+| 3   | Error during signal processing                                 |
+| 4   | Sensor error                                                   |
+| 5   | Sensor error                                                   |
+| 6   | Excessive ultrasound noise detected                            |
+| 7   | Synchronization between sensors failed                         |
+| 8   | Timeout during signal processing                               |
+| 9   | The sensor is obstructed                                       |
+| 10  | Service needed                                                 |
+| 11  | OSSD0 pulse test verification failed                           |
+| 12  | OSSD1 pulse test verification failed                           |
+| 13  | Object in protective zone possibly unaccounted for             |
+| 14  | Zone select input is unstable                                  |
+| 15  | Zone select input validation failure                           |
+| 16  | CPU 1 in undefined state                                       |
+| 17  | CPU 2 in undefined state                                       |
+| 18  | Unsupported hardware version                                   |
+| 19  | OSSD0 off-state (low) check failed                             |
+| 20  | OSSD1 off-state (low) check failed                             |
+
+Bits 21-31 are reserved.
 
 #### Device Info Format
 
@@ -376,28 +504,11 @@ Variable-length format with [length-prefixed strings](#length-prefixed-string-fo
 
 ##### Configuration Flags
 
-| Bit 31-3 | Bit 2            | Bit 1        | Bit 0                                |
-| -------- | ---------------- | ------------ | ------------------------------------ |
-| Reserved | Sync server mode | Sync enabled | Static IP enabled (0=DHCP, 1=Static) |
+| Bit 31-4 | Bit 3                     | Bit 2       | Bit 1        | Bit 0                                |
+| -------- | ------------------------- | ----------- | ------------ | ------------------------------------ |
+| Reserved | Sync source IP filter set | Sync source | Sync enabled | Static IP enabled (0=DHCP, 1=Static) |
 
-#### Statistics Format
-
-44-byte binary structure:
-
-| Byte Range | Field                                   | Type                                | Description                                  |
-| ---------- | --------------------------------------- | ----------------------------------- | -------------------------------------------- |
-| 0-11       | Uptime                                  | [Duration format](#duration-format) | Device uptime                                |
-| 12-19      | Total Number of Pings                   | uint64                              | Total pings count, little-endian             |
-| 20-27      | Pings with Object in Protective Zone    | uint64                              | Protective zone detections, little-endian    |
-| 28-35      | Pings with Object in Inner Warning Zone | uint64                              | Inner warning zone detections, little-endian |
-| 36-43      | Pings with Object in Outer Warning Zone | uint64                              | Outer warning zone detections, little-endian |
-
-##### Duration Format
-
-| Byte Range | Field       | Type   | Description                          |
-| ---------- | ----------- | ------ | ------------------------------------ |
-| 0-7        | Seconds     | uint64 | Seconds component, little-endian     |
-| 8-11       | Nanoseconds | uint32 | Nanoseconds component, little-endian |
+_Note: When **bit 2** (Sync source) is set, this device provides the sync signal for other devices. When **bit 3** is set, the device only accepts synchronization from the IP specified in the Sync Server IP field (bytes 16-19)._
 
 #### Error Format
 
@@ -418,11 +529,22 @@ Variable-length format with error bitmask and description strings:
 
 Single byte payload:
 
-| Byte | Field   | Type  | Description                          |
-| ---- | ------- | ----- | ------------------------------------ |
-| 0    | Code ID | uint8 | Transmission code ID (1, 2, 4, or 8) |
+| Byte | Field      | Type  | Description                             |
+| ---- | ---------- | ----- | --------------------------------------- |
+| 0    | Code index | uint8 | Transmission code Index (0, 1, 2, or 3) |
 
-_Note: This resource uses the code ID (which is a binary bitmask), while the [Device Status](#device-status-format) uses a transmission code index (0-3) where the code ID is 2^index._
+### Authentication
+
+Several resources require the client to be logged in. The authentication flow uses a challenge-response mechanism:
+
+1. **GET `/login/v1`** — The device returns an 8-byte login token (uint64, little-endian). This token is a one-time challenge.
+2. The client encodes the device password using the received token.
+3. **PUT `/login/v1`** — The client sends the encoded password. On success, the device responds with a session token ([length-prefixed UTF-8 string](#length-prefixed-string-format), up to 16 characters).
+4. Subsequent authenticated requests include the session token as a URI query parameter: `?t=<session_token>`.
+
+The session ends when the client sends **PUT `/logout/v1`**, or when the device is rebooted.
+
+> **Note:** Only one user session is active at a time. A login attempt while another session is active will be rejected with **4.03 Forbidden**. The existing session must be ended (via logout or device reboot) before a new login can succeed.
 
 ### CoAP Response Codes
 
@@ -437,7 +559,7 @@ When working with ADAR resources, you may encounter these CoAP response codes:
 #### Client Error Responses
 
 - **`4.00 Bad Request`** - Malformed request or invalid payload data
-- **`4.04 Not Found`** - Resource does not exist (e.g., typos in resource paths like `/pointclouds/v0` instead of `/pointcloud/v0`) or unauthorized access
+- **`4.04 Not Found`** - Resource does not exist (e.g., typos in resource paths like `/pointclouds/v1` instead of `/pointcloud/v1`) or unauthorized access
 - **`4.05 Method Not Allowed`** - Invalid HTTP method for the resource (e.g., PUT to a read-only resource)
 - **`4.08 Request Entity Incomplete`** - Missing or incomplete payload for operations that require data
 - **`4.29 Too Many Requests`** - Observer limit exceeded (max 2 point cloud observers)

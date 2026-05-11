@@ -25,7 +25,7 @@ class NetworkConfig:
         Initialize NetworkConfig either from bytes or from individual parameters.
 
         Args:
-            data: 84+ bytes containing network configuration
+            data: 212 bytes containing network configuration
             dhcp_enabled: Whether DHCP is enabled (ignored if data provided)
             static_ip: Static IP address string (ignored if data provided)
             subnet_mask: Subnet mask string (ignored if data provided)
@@ -50,12 +50,14 @@ class NetworkConfig:
             )
 
     def _parse_from_data(self, data: bytes):
-        """Parse network configuration from bytes.
+        """Parse network configuration from bytes (212 bytes: flags + 4 IPs + 64 reserved + 128-byte device tag).
 
         Args:
             data: Binary data containing network configuration
         """
-        assert len(data) >= 20 + 64, f"Network config data should be at least 84 bytes, got {len(data)}"
+        if len(data) < 212:
+            raise ValueError(f"Network config data must be 212 bytes, got {len(data)}")
+
         self.data = data
 
         (
@@ -67,14 +69,13 @@ class NetworkConfig:
         ) = struct.unpack_from("<I4s4s4s4s", data)
 
         self.cfg_flags = cfg_flags
-        self.dhcp_enabled = not bool(cfg_flags & 0x01)  # Flag 0x01 means static IP (not DHCP)
+        self.dhcp_enabled = not bool(cfg_flags & FLAG_STATIC_IP)
         self.sync_enabled = bool(cfg_flags & FLAG_SYNC_ENABLED)
         self.sync_server_enabled = bool(cfg_flags & FLAG_SYNC_SERVER_ENABLED)
         self.static_ip = ".".join(map(str, static_ip_bytes))
         self.subnet_mask = ".".join(map(str, subnet_mask_bytes))
         self.gateway = ".".join(map(str, gateway_bytes))
         self.sync_server_ip = ".".join(map(str, sync_server_ip_bytes))
-        # Device tag is a 0-terminated string of up to 128 bytes that follows after 64 bytes of reserved space
         self.device_tag = data[20 + 64 : 20 + 64 + 128].decode("utf-8").rstrip("\0")
 
     def _parse_from_params(
@@ -114,13 +115,22 @@ class NetworkConfig:
         self.cfg_flags |= FLAG_SYNC_ENABLED if sync_enabled else 0x00
         self.cfg_flags |= FLAG_SYNC_SERVER_ENABLED if sync_server_enabled else 0x00
 
-        # Pack into binary format
-        static_ip_bytes = bytes(map(int, static_ip.split(".")))
-        subnet_mask_bytes = bytes(map(int, subnet_mask.split(".")))
-        gateway_bytes = bytes(map(int, gateway.split(".")))
-        sync_server_ip_bytes = bytes(map(int, sync_server_ip.split(".")))
+        self.data = self.encode()
 
-        self.data = struct.pack(
+    def encode(self) -> bytes:
+        """Return the network configuration as 212 bytes.
+
+        Format: 4-byte flags + 4x4-byte IPs + 64-byte reserved + 128-byte device tag.
+
+        Returns:
+            Binary representation of the network configuration.
+        """
+        static_ip_bytes = bytes(map(int, self.static_ip.split(".")))
+        subnet_mask_bytes = bytes(map(int, self.subnet_mask.split(".")))
+        gateway_bytes = bytes(map(int, self.gateway.split(".")))
+        sync_server_ip_bytes = bytes(map(int, self.sync_server_ip.split(".")))
+
+        data = struct.pack(
             "<I4s4s4s4s",
             self.cfg_flags,
             static_ip_bytes,
@@ -128,18 +138,12 @@ class NetworkConfig:
             gateway_bytes,
             sync_server_ip_bytes,
         )
-        # Add 64 bytes of zeros for reserved space
-        self.data += bytes([0] * 64)
-        # Add device tag with null terminator
-        self.data += device_tag.encode("utf-8") + b"\0"
-
-    def encode(self) -> bytes:
-        """Return the network configuration as bytes.
-
-        Returns:
-            Binary representation of the network configuration
-        """
-        return self.data
+        data += bytes(64)  # Reserved
+        tag_bytes = self.device_tag.encode("utf-8")
+        if len(tag_bytes) >= 128:
+            raise ValueError(f"Device tag too long: {len(tag_bytes)} bytes (max 127)")
+        data += tag_bytes + bytes(128 - len(tag_bytes))
+        return data
 
     def __str__(self) -> str:
         dhcp_status = "Yes" if self.dhcp_enabled else "No"
